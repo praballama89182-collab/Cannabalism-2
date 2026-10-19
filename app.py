@@ -86,7 +86,12 @@ def process_ngrams(df, n_value):
     ng_agg['ACOS'] = ng_agg.apply(lambda x: (x['Spend']/x['Sales'])*100 if x['Sales'] > 0 else 0, axis=1)
     ng_agg['Count'] = ng_df.groupby('N-Gram').size().values 
     
-    return ng_agg.sort_values(by='Spend', ascending=False)
+    ng_agg = ng_agg.sort_values(by='Spend', ascending=False)
+    for c in ['Spend', 'Sales', 'ROAS', 'CPC', 'ACOS']:
+        if c in ng_agg.columns:
+            ng_agg[c] = ng_agg[c].round(1)
+            
+    return ng_agg[['N-Gram', 'Count', 'Spend', 'Sales', 'Orders', 'ACOS', 'ROAS']]
 
 def to_single_excel(df, sheet_name):
     output = io.BytesIO()
@@ -448,23 +453,31 @@ def main():
                     with col_control2: search_gram = st.text_input("🔍 Filter by word (e.g., 'leather')", "")
                     
                     df_ngram = process_ngrams(df_agg, n_select)
+                    
+                    # Pre-calculate all N-Grams for master export
+                    df_ngram_1 = process_ngrams(df_agg, 1)
+                    df_ngram_2 = process_ngrams(df_agg, 2)
+                    df_ngram_3 = process_ngrams(df_agg, 3)
+                    df_ngram_4 = process_ngrams(df_agg, 4)
+
                     if not df_ngram.empty:
-                        for c in ['Spend', 'Sales', 'ROAS', 'CPC', 'ACOS']: df_ngram[c] = df_ngram[c].round(1)
-                        if search_gram: df_ngram = df_ngram[df_ngram['N-Gram'].str.contains(search_gram.lower())]
+                        display_ngram_df = df_ngram.copy()
+                        if search_gram: 
+                            display_ngram_df = display_ngram_df[display_ngram_df['N-Gram'].str.contains(search_gram.lower())]
                         
                         st.download_button(
-                            label="📥 Download N-Gram Report",
-                            data=to_single_excel(df_ngram, "N-Gram_Analysis"),
-                            file_name="NGram_Analysis_Report.xlsx",
+                            label=f"📥 Download {n_select}-Gram Report",
+                            data=to_single_excel(display_ngram_df, f"{n_select}-Gram"),
+                            file_name=f"{n_select}Gram_Analysis_Report.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             key="dl_ngram"
                         )
                         
                         st.markdown(f"##### Top {n_select}-Word Phrases by Spend")
-                        st.bar_chart(df_ngram.head(20).set_index('N-Gram')['Spend'], color="#ff4b4b")
+                        st.bar_chart(display_ngram_df.head(20).set_index('N-Gram')['Spend'], color="#ff4b4b")
                         st.markdown("##### Detailed N-Gram Report")
                         st.dataframe(
-                            df_ngram[['N-Gram', 'Count', 'Spend', 'Sales', 'Orders', 'ACOS', 'ROAS']].style.format({
+                            display_ngram_df.style.format({
                                 'Spend': '{:.1f}', 'Sales': '{:.1f}', 'ACOS': '{:.1f}%', 'ROAS': '{:.1f}'
                             }), 
                             use_container_width=True
@@ -475,14 +488,17 @@ def main():
                 # EXPORT & DOWNLOAD ALL MASTER REPORT
                 st.markdown("---")
                 st.markdown("### 📥 Download Master Report (All Tabs)")
-                st.caption("Download all analysis results neatly organized into multiple professional tabs in a single Excel file with frozen first columns and compact campaign/ad group column widths.")
+                st.caption("Download all analysis results neatly organized into multiple professional tabs (including 1-Gram, 2-Gram, 3-Gram, and 4-Gram tabs) in a single Excel file.")
                 
                 export_data = {
                     'Cannibalization': df_cannibal if 'df_cannibal' in locals() and not df_cannibal.empty else pd.DataFrame(columns=['Status']),
                     'Harvesting': df_harvest if 'df_harvest' in locals() and not df_harvest.empty else pd.DataFrame(columns=['Status']),
                     'CPC_Analysis': df_cpc if 'df_cpc' in locals() and not df_cpc.empty else pd.DataFrame(columns=['Status']),
                     'Wasted_Spend': df_waste if 'df_waste' in locals() and not df_waste.empty else pd.DataFrame(columns=['Status']),
-                    'N-Gram_Analysis': df_ngram if 'df_ngram' in locals() and not df_ngram.empty else pd.DataFrame(columns=['Status'])
+                    '1-Gram': df_ngram_1 if not df_ngram_1.empty else pd.DataFrame(columns=['Status']),
+                    '2-Gram': df_ngram_2 if not df_ngram_2.empty else pd.DataFrame(columns=['Status']),
+                    '3-Gram': df_ngram_3 if not df_ngram_3.empty else pd.DataFrame(columns=['Status']),
+                    '4-Gram': df_ngram_4 if not df_ngram_4.empty else pd.DataFrame(columns=['Status'])
                 }
                 
                 excel_file = to_excel(export_data)
