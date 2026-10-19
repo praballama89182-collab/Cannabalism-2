@@ -195,10 +195,10 @@ def main():
     # --- MAIN CONTENT ---
     if df is not None:
         try:
-            # Column Mapping
+            # Column Mapping (Support Start Date or Date)
             col_map = {
-                'date': next((c for c in df.columns if 'Date' in c), None),
-                'term': next((c for c in df.columns if 'Matched product' in c or 'Customer Search Term' in c), None),
+                'date': next((c for c in df.columns if 'Start Date' in c or 'Date' in c), None),
+                'term': next((c for c in df.columns if 'Customer Search Term' in c or 'Matched product' in c), None),
                 'camp': next((c for c in df.columns if 'Campaign Name' in c), None),
                 'adg': next((c for c in df.columns if 'Ad Group Name' in c), None),
                 'match': next((c for c in df.columns if 'Match Type' in c), None),
