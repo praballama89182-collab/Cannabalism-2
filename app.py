@@ -1,6 +1,11 @@
-import streamlit as st
-import pandas as pd
+"""
+Amazon Sponsored Products — Search Term Intelligence & Cannibalization Tool
+-----------------------------------------------------------------------------
+"""
+
 import io
+import pandas as pd
+import streamlit as st
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -86,9 +91,47 @@ def process_ngrams(df, n_value):
 def to_excel(dfs):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        # Professional Formatting Styles
+        header_format = workbook.add_format({
+            'bg_color': '#4285F4',
+            'font_color': '#FFFFFF',
+            'bold': True,
+            'align': 'center',
+            'valign': 'middle',
+            'border': 1
+        })
+        
+        cell_format = workbook.add_format({
+            'align': 'center',
+            'valign': 'middle',
+            'border': 1
+        })
+
         for sheet_name, df in dfs.items():
             if not df.empty:
-                df.to_excel(writer, sheet_name=sheet_name[:31], index=False) 
+                sheet_title = sheet_name[:31]
+                df.to_excel(writer, sheet_name=sheet_title, index=False)
+                worksheet = writer.sheets[sheet_title]
+                
+                # Apply Header Formatting
+                for col_num, value in enumerate(df.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                
+                # Apply Cell Formatting and Borders
+                for row_num in range(len(df)):
+                    for col_num in range(len(df.columns)):
+                        val = df.iloc[row_num, col_num]
+                        if pd.isna(val):
+                            val = ""
+                        worksheet.write(row_num + 1, col_num, val, cell_format)
+                
+                # Auto-fit Column Widths
+                for i, col in enumerate(df.columns):
+                    max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 4
+                    worksheet.set_column(i, i, max(max_len, 14))
+                    
     return output.getvalue()
 
 # --- MAIN APP ---
@@ -316,13 +359,13 @@ def main():
                         day_agg['ROAS'] = day_agg.apply(lambda x: x[col_map['sales']]/x[col_map['spend']] if x[col_map['spend']]>0 else 0, axis=1)
                         day_agg['ACOS'] = day_agg.apply(lambda x: (x[col_map['spend']]/x[col_map['sales']])*100 if x[col_map['sales']]>0 else 0, axis=1)
                         
-                        day_display = day_agg.rename(columns={col_map['spend']: 'Spend', col_map['sales']: 'Sales', col_map['orders']: 'Orders'})
+                        day_display = day_agg.rename(columns={col_map['spend']: 'Spend', col_map['sales']: 'Sales', col_map['orders']: 'Orders'}).reset_index().rename(columns={'index': 'Day'})
                         for c in ['Spend', 'Sales', 'ROAS', 'ACOS']: day_display[c] = day_display[c].round(1)
 
                         c1, c2 = st.columns(2)
-                        with c1: st.markdown("##### 📉 Spend Trend"); st.bar_chart(day_display['Spend'], color="#ff4b4b")
-                        with c2: st.markdown("##### 📦 Order Volume"); st.bar_chart(day_display['Orders'], color="#00C0F2")
-                        st.markdown("##### Daily Breakdown"); st.dataframe(day_display[['Spend', 'Sales', 'Orders', 'ROAS', 'ACOS']].style.format("{:.1f}"), use_container_width=True)
+                        with c1: st.markdown("##### 📉 Spend Trend"); st.bar_chart(day_display.set_index('Day')['Spend'], color="#ff4b4b")
+                        with c2: st.markdown("##### 📦 Order Volume"); st.bar_chart(day_display.set_index('Day')['Orders'], color="#00C0F2")
+                        st.markdown("##### Daily Breakdown"); st.dataframe(day_display.set_index('Day')[['Spend', 'Sales', 'Orders', 'ROAS', 'ACOS']].style.format("{:.1f}"), use_container_width=True)
                     else:
                         st.warning("No 'Date' column found.")
                         day_display = pd.DataFrame()
@@ -359,19 +402,27 @@ def main():
                     else:
                         st.warning("No data found.")
 
-                # EXPORT
+                # EXPORT & DOWNLOAD ALL MASTER REPORT
                 st.markdown("---")
-                st.markdown("### 📥 Download Everything")
+                st.markdown("### 📥 Download Master Report")
+                st.caption("Download all analysis results neatly organized into multiple professional tabs in a single Excel file.")
+                
                 export_data = {
-                    'Cannibalization': df_cannibal if 'df_cannibal' in locals() else pd.DataFrame(),
-                    'Harvesting': df_harvest if 'df_harvest' in locals() else pd.DataFrame(),
-                    'CPC_Analysis': df_cpc if 'df_cpc' in locals() else pd.DataFrame(),
-                    'Wasted_Spend': df_waste if 'df_waste' in locals() else pd.DataFrame(),
-                    'Day_Performance': day_display if 'day_display' in locals() else pd.DataFrame(),
-                    'N-Gram_Analysis': df_ngram if 'df_ngram' in locals() else pd.DataFrame()
+                    'Cannibalization': df_cannibal if 'df_cannibal' in locals() and not df_cannibal.empty else pd.DataFrame(columns=['Status']),
+                    'Harvesting': df_harvest if 'df_harvest' in locals() and not df_harvest.empty else pd.DataFrame(columns=['Status']),
+                    'CPC_Analysis': df_cpc if 'df_cpc' in locals() and not df_cpc.empty else pd.DataFrame(columns=['Status']),
+                    'Wasted_Spend': df_waste if 'df_waste' in locals() and not df_waste.empty else pd.DataFrame(columns=['Status']),
+                    'Day_Performance': day_display if 'day_display' in locals() and not day_display.empty else pd.DataFrame(columns=['Status']),
+                    'N-Gram_Analysis': df_ngram if 'df_ngram' in locals() and not df_ngram.empty else pd.DataFrame(columns=['Status'])
                 }
+                
                 excel_file = to_excel(export_data)
-                st.download_button(label="📥 Download Master Report", data=excel_file, file_name="Prabal_Ecommerce_Master_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="📥 Download All Tabs (Master Excel Report)", 
+                    data=excel_file, 
+                    file_name="Prabal_Ecommerce_Master_Report.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
                 
         except Exception as e:
             st.error(f"Error processing analysis: {e}")
