@@ -115,6 +115,9 @@ def to_excel(dfs):
                 df.to_excel(writer, sheet_name=sheet_title, index=False)
                 worksheet = writer.sheets[sheet_title]
                 
+                # Freeze first column (Column A) and header row
+                worksheet.freeze_panes(1, 1)
+                
                 # Apply Header Formatting
                 for col_num, value in enumerate(df.columns.values):
                     worksheet.write(0, col_num, value, header_format)
@@ -127,10 +130,15 @@ def to_excel(dfs):
                             val = ""
                         worksheet.write(row_num + 1, col_num, val, cell_format)
                 
-                # Auto-fit Column Widths
+                # Auto-fit Column Widths (with custom compact widths for Campaign & Ad Groups)
                 for i, col in enumerate(df.columns):
                     max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 4
-                    worksheet.set_column(i, i, max(max_len, 14))
+                    col_upper = str(col).upper()
+                    if 'CAMPAIGN' in col_upper or 'AD GROUP' in col_upper or 'SOURCE' in col_upper:
+                        # Compact size for campaign/ad groups
+                        worksheet.set_column(i, i, min(max_len, 16))
+                    else:
+                        worksheet.set_column(i, i, max(max_len, 14))
                     
     return output.getvalue()
 
@@ -265,7 +273,7 @@ def main():
                 c3.metric("Account ROAS", f"{account_roas:.1f}")
                 c4.metric("Unique Search Terms", f"{df_agg['Search Term'].nunique():,}")
 
-                # --- TABS (Best Days removed) ---
+                # --- TABS ---
                 tabs = st.tabs(["⚔️ Cannibalization", "🌾 Harvesting", "💰 CPC Analyzer", "💸 Wasted Spend", "🔠 N-Gram Analysis"])
 
                 # TAB 1: CANNIBALIZATION
@@ -383,7 +391,7 @@ def main():
                 # EXPORT & DOWNLOAD ALL MASTER REPORT
                 st.markdown("---")
                 st.markdown("### 📥 Download Master Report")
-                st.caption("Download all analysis results neatly organized into multiple professional tabs in a single Excel file.")
+                st.caption("Download all analysis results neatly organized into multiple professional tabs in a single Excel file with frozen first columns and compact campaign/ad group column widths.")
                 
                 export_data = {
                     'Cannibalization': df_cannibal if 'df_cannibal' in locals() and not df_cannibal.empty else pd.DataFrame(columns=['Status']),
