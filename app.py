@@ -234,7 +234,7 @@ def main():
                 min_orders_cannibal = st.number_input("Min Orders to Win", 1, 10, 2)
                 
             with st.expander("🌾 Harvesting Rules", expanded=True):
-                min_orders_harvest = st.number_input("Min Orders", 1, 10, 2, help="Strictly > 1 means set this to 2")
+                min_orders_harvest = st.number_input("Min Orders", 1, 10, 2, help="Set to 1 if you want to include single-order terms")
                 min_roas_harvest = st.number_input("Min ROAS", 0.1, 10.0, 1.0, 0.1)
                 
             with st.expander("💰 CPC Analyzer", expanded=False):
@@ -337,7 +337,7 @@ def main():
                                     'Search Term': term, 'Campaign': row['Campaign'], 'Ad Group': row['Ad Group'],
                                     'CPC': row['CPC'], 'Spend': row['spend_val'], 'Sales': row['sales_val'], 
                                     'Orders': row['orders_val'], 'ROAS': row['calculated_roas'], 
-                                    'Action': "✅ KEEP" if is_winner else "⛔ NEGATE"
+                                    'Action': "KEEP" if is_winner else "NEGATE"
                                 })
                         
                         df_cannibal = pd.DataFrame(cannibal_results)
@@ -366,7 +366,7 @@ def main():
                     for idx, row in candidates.iterrows():
                         if row['Search Term'].lower() not in existing_exact:
                             harvest_results.append({
-                                'Search Term': row['Search Term'], 'Rec Type': '🚀 NEW EXACT', 
+                                'Search Term': row['Search Term'], 'Rec Type': 'NEW EXACT', 
                                 'Source Campaign': row['Campaign'], 'Source Ad Group': row['Ad Group'],
                                 'Orders': row['Orders'], 'Sales': row['Sales'], 'ROAS': row['ROAS'], 'CPC': row['CPC']
                             })
@@ -385,7 +385,7 @@ def main():
                         
                         st.dataframe(df_harvest.sort_values(by='Sales', ascending=False), use_container_width=True)
                     else:
-                        st.info("No terms met criteria.")
+                        st.info("No terms met criteria. Try lowering 'Min Orders' in the sidebar settings if your report has many single-order terms.")
                         df_harvest = pd.DataFrame()
 
                 # TAB 3: CPC ANALYZER
@@ -399,9 +399,9 @@ def main():
                         subset = df_top[df_top['Search Term'] == term]
                         avg_cpc = subset['CPC'].mean()
                         for idx, row in subset.iterrows():
-                            rec = "✅ Healthy"
-                            if row['ROAS'] < bad_roas_limit: rec = "⚠️ Low ROAS"
-                            elif row['CPC'] > (avg_cpc * 1.3): rec = "⚠️ High CPC"
+                            rec = "Healthy"
+                            if row['ROAS'] < bad_roas_limit: rec = "Low ROAS"
+                            elif row['CPC'] > (avg_cpc * 1.3): rec = "High CPC"
                             cpc_results.append({
                                 'Search Term': term, 'Campaign': row['Campaign'], 'Match': row['norm_match'],
                                 'Spend': row['Spend'], 'Sales': row['Sales'], 'CPC': row['CPC'], 'ROAS': row['ROAS'], 'Rec': rec
