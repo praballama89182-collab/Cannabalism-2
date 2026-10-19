@@ -9,7 +9,7 @@ import streamlit as st
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Prabal Ecommerce Analyzer",
+    page_title="Amazon Search Term Analyzer",
     page_icon="🛒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -88,12 +88,58 @@ def process_ngrams(df, n_value):
     
     return ng_agg.sort_values(by='Spend', ascending=False)
 
+def to_single_excel(df, sheet_name):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        header_format = workbook.add_format({
+            'bg_color': '#4285F4',
+            'font_color': '#FFFFFF',
+            'bold': True,
+            'align': 'center',
+            'valign': 'middle',
+            'border': 1
+        })
+        
+        cell_format = workbook.add_format({
+            'align': 'center',
+            'valign': 'middle',
+            'border': 1
+        })
+
+        if not df.empty:
+            sheet_title = sheet_name[:31]
+            df.to_excel(writer, sheet_name=sheet_title, index=False)
+            worksheet = writer.sheets[sheet_title]
+            
+            worksheet.freeze_panes(1, 1)
+            
+            for col_num, value in enumerate(df.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            for row_num in range(len(df)):
+                for col_num in range(len(df.columns)):
+                    val = df.iloc[row_num, col_num]
+                    if pd.isna(val):
+                        val = ""
+                    worksheet.write(row_num + 1, col_num, val, cell_format)
+            
+            for i, col in enumerate(df.columns):
+                max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 4
+                col_upper = str(col).upper()
+                if 'CAMPAIGN' in col_upper or 'AD GROUP' in col_upper or 'SOURCE' in col_upper:
+                    worksheet.set_column(i, i, min(max_len, 16))
+                else:
+                    worksheet.set_column(i, i, max(max_len, 14))
+                    
+    return output.getvalue()
+
 def to_excel(dfs):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         
-        # Professional Formatting Styles
         header_format = workbook.add_format({
             'bg_color': '#4285F4',
             'font_color': '#FFFFFF',
@@ -115,14 +161,11 @@ def to_excel(dfs):
                 df.to_excel(writer, sheet_name=sheet_title, index=False)
                 worksheet = writer.sheets[sheet_title]
                 
-                # Freeze first column (Column A) and header row
                 worksheet.freeze_panes(1, 1)
                 
-                # Apply Header Formatting
                 for col_num, value in enumerate(df.columns.values):
                     worksheet.write(0, col_num, value, header_format)
                 
-                # Apply Cell Formatting and Borders
                 for row_num in range(len(df)):
                     for col_num in range(len(df.columns)):
                         val = df.iloc[row_num, col_num]
@@ -130,12 +173,10 @@ def to_excel(dfs):
                             val = ""
                         worksheet.write(row_num + 1, col_num, val, cell_format)
                 
-                # Auto-fit Column Widths (with custom compact widths for Campaign & Ad Groups)
                 for i, col in enumerate(df.columns):
                     max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 4
                     col_upper = str(col).upper()
                     if 'CAMPAIGN' in col_upper or 'AD GROUP' in col_upper or 'SOURCE' in col_upper:
-                        # Compact size for campaign/ad groups
                         worksheet.set_column(i, i, min(max_len, 16))
                     else:
                         worksheet.set_column(i, i, max(max_len, 14))
@@ -146,7 +187,7 @@ def to_excel(dfs):
 
 def main():
     with st.sidebar:
-        st.title("🛒 Prabal Ecommerce Analyzer")
+        st.title("🛒 Amazon Search Term Analyzer")
         st.markdown("---")
         
         # 1. File Upload
@@ -260,7 +301,7 @@ def main():
                 existing_exact = set(df_agg[df_agg['norm_match'] == 'EXACT']['Search Term'].str.lower().unique())
 
                 # --- HEADER ---
-                st.title("Prabal Ecommerce Analyzer")
+                st.title("Amazon Search Term Analyzer")
                 st.markdown(f"**Analyzing File:** `{uploaded_file.name}`")
                 
                 c1, c2, c3, c4 = st.columns(4)
@@ -301,6 +342,15 @@ def main():
                         
                         df_cannibal = pd.DataFrame(cannibal_results)
                         for c in ['Spend', 'Sales', 'ROAS', 'CPC']: df_cannibal[c] = df_cannibal[c].round(1)
+                        
+                        st.download_button(
+                            label="📥 Download Cannibalization Report",
+                            data=to_single_excel(df_cannibal, "Cannibalization"),
+                            file_name="Cannibalization_Report.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="dl_cannibal"
+                        )
+                        
                         st.dataframe(df_cannibal.style.apply(lambda x: ['background-color: #ffebee' if 'NEGATE' in str(v) else '' for v in x], axis=1), use_container_width=True)
                     else:
                         st.success("No cannibalization found.")
@@ -324,6 +374,15 @@ def main():
                     df_harvest = pd.DataFrame(harvest_results)
                     if not df_harvest.empty:
                         for c in ['Sales', 'ROAS', 'CPC']: df_harvest[c] = df_harvest[c].round(1)
+                        
+                        st.download_button(
+                            label="📥 Download Harvesting Report",
+                            data=to_single_excel(df_harvest, "Harvesting"),
+                            file_name="Harvesting_Report.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="dl_harvest"
+                        )
+                        
                         st.dataframe(df_harvest.sort_values(by='Sales', ascending=False), use_container_width=True)
                     else:
                         st.info("No terms met criteria.")
@@ -351,6 +410,14 @@ def main():
                     df_cpc = pd.DataFrame(cpc_results)
                     for c in ['Spend', 'Sales', 'CPC', 'ROAS']: df_cpc[c] = df_cpc[c].round(1)
                     
+                    st.download_button(
+                        label="📥 Download CPC Analyzer Report",
+                        data=to_single_excel(df_cpc, "CPC_Analysis"),
+                        file_name="CPC_Analysis_Report.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_cpc"
+                    )
+                    
                     def highlight_high_cpc(row):
                         if 'High CPC' in row['Rec'] or 'Low ROAS' in row['Rec']: return ['color: #d32f2f; font-weight: bold'] * len(row)
                         return [''] * len(row)
@@ -362,6 +429,15 @@ def main():
                     waste_threshold = st.slider("Min Spend Threshold", 50, 1000, 200)
                     df_waste = df_agg[(df_agg['Orders'] == 0) & (df_agg['Spend'] >= waste_threshold)].sort_values(by='Spend', ascending=False)
                     for c in ['Spend', 'CPC', 'ACOS']: df_waste[c] = df_waste[c].round(1)
+                    
+                    st.download_button(
+                        label="📥 Download Wasted Spend Report",
+                        data=to_single_excel(df_waste, "Wasted_Spend"),
+                        file_name="Wasted_Spend_Report.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_waste"
+                    )
+                    
                     st.dataframe(df_waste[['Search Term', 'Campaign', 'Ad Group', 'Spend', 'Orders', 'ACOS', 'Clicks', 'CPC']].style.format({'Spend': '{:.1f}', 'CPC': '{:.1f}', 'ACOS': '{:.1f}'}), use_container_width=True)
 
                 # TAB 5: N-GRAMS
@@ -375,6 +451,14 @@ def main():
                     if not df_ngram.empty:
                         for c in ['Spend', 'Sales', 'ROAS', 'CPC', 'ACOS']: df_ngram[c] = df_ngram[c].round(1)
                         if search_gram: df_ngram = df_ngram[df_ngram['N-Gram'].str.contains(search_gram.lower())]
+                        
+                        st.download_button(
+                            label="📥 Download N-Gram Report",
+                            data=to_single_excel(df_ngram, "N-Gram_Analysis"),
+                            file_name="NGram_Analysis_Report.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="dl_ngram"
+                        )
                         
                         st.markdown(f"##### Top {n_select}-Word Phrases by Spend")
                         st.bar_chart(df_ngram.head(20).set_index('N-Gram')['Spend'], color="#ff4b4b")
@@ -390,7 +474,7 @@ def main():
 
                 # EXPORT & DOWNLOAD ALL MASTER REPORT
                 st.markdown("---")
-                st.markdown("### 📥 Download Master Report")
+                st.markdown("### 📥 Download Master Report (All Tabs)")
                 st.caption("Download all analysis results neatly organized into multiple professional tabs in a single Excel file with frozen first columns and compact campaign/ad group column widths.")
                 
                 export_data = {
@@ -403,9 +487,9 @@ def main():
                 
                 excel_file = to_excel(export_data)
                 st.download_button(
-                    label="📥 Download All Tabs (Master Excel Report)", 
+                    label="📥 Download Master Report (All Tabs in One File)", 
                     data=excel_file, 
-                    file_name="Prabal_Ecommerce_Master_Report.xlsx", 
+                    file_name="Amazon_Search_Term_Master_Report.xlsx", 
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
                 
