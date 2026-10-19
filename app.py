@@ -195,7 +195,7 @@ def main():
     # --- MAIN CONTENT ---
     if df is not None:
         try:
-            # Column Mapping (Support Start Date or Date)
+            # Column Mapping
             col_map = {
                 'date': next((c for c in df.columns if 'Start Date' in c or 'Date' in c), None),
                 'term': next((c for c in df.columns if 'Customer Search Term' in c or 'Matched product' in c), None),
@@ -219,9 +219,6 @@ def main():
                         df[col_map[c]] = pd.to_numeric(df[col_map[c]], errors='coerce').fillna(0)
                 
                 df['norm_match'] = df[col_map['match']].apply(normalize_match_type)
-                if col_map['date']:
-                    df['Date'] = pd.to_datetime(df[col_map['date']], errors='coerce')
-                    df['DayOfWeek'] = df['Date'].dt.day_name()
 
                 # --- AGGREGATION ---
                 agg_cols = [col_map['term'], col_map['camp'], col_map['adg'], 'norm_match']
@@ -268,8 +265,8 @@ def main():
                 c3.metric("Account ROAS", f"{account_roas:.1f}")
                 c4.metric("Unique Search Terms", f"{df_agg['Search Term'].nunique():,}")
 
-                # --- TABS ---
-                tabs = st.tabs(["⚔️ Cannibalization", "🌾 Harvesting", "💰 CPC Analyzer", "📅 Best Days", "💸 Wasted Spend", "🔠 N-Gram Analysis"])
+                # --- TABS (Best Days removed) ---
+                tabs = st.tabs(["⚔️ Cannibalization", "🌾 Harvesting", "💰 CPC Analyzer", "💸 Wasted Spend", "🔠 N-Gram Analysis"])
 
                 # TAB 1: CANNIBALIZATION
                 with tabs[0]:
@@ -351,35 +348,16 @@ def main():
                         return [''] * len(row)
                     st.dataframe(df_cpc.style.apply(highlight_high_cpc, axis=1).format({'CPC': '{:.1f}', 'ROAS': '{:.1f}', 'Spend': '{:.1f}', 'Sales': '{:.1f}'}), use_container_width=True)
 
-                # TAB 4: BEST DAYS
+                # TAB 4: WASTED SPEND
                 with tabs[3]:
-                    st.subheader("📅 Day Parting Performance")
-                    if col_map['date']:
-                        day_agg = df.groupby(df['Date'].dt.day_name()).agg({col_map['spend']: 'sum', col_map['sales']: 'sum', col_map['orders']: 'sum'}).reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-                        day_agg['ROAS'] = day_agg.apply(lambda x: x[col_map['sales']]/x[col_map['spend']] if x[col_map['spend']]>0 else 0, axis=1)
-                        day_agg['ACOS'] = day_agg.apply(lambda x: (x[col_map['spend']]/x[col_map['sales']])*100 if x[col_map['sales']]>0 else 0, axis=1)
-                        
-                        day_display = day_agg.rename(columns={col_map['spend']: 'Spend', col_map['sales']: 'Sales', col_map['orders']: 'Orders'}).reset_index().rename(columns={'index': 'Day'})
-                        for c in ['Spend', 'Sales', 'ROAS', 'ACOS']: day_display[c] = day_display[c].round(1)
-
-                        c1, c2 = st.columns(2)
-                        with c1: st.markdown("##### 📉 Spend Trend"); st.bar_chart(day_display.set_index('Day')['Spend'], color="#ff4b4b")
-                        with c2: st.markdown("##### 📦 Order Volume"); st.bar_chart(day_display.set_index('Day')['Orders'], color="#00C0F2")
-                        st.markdown("##### Daily Breakdown"); st.dataframe(day_display.set_index('Day')[['Spend', 'Sales', 'Orders', 'ROAS', 'ACOS']].style.format("{:.1f}"), use_container_width=True)
-                    else:
-                        st.warning("No 'Date' column found.")
-                        day_display = pd.DataFrame()
-
-                # TAB 5: WASTED SPEND
-                with tabs[4]:
                     st.subheader("💸 Wasted Spend (Zero Orders)")
                     waste_threshold = st.slider("Min Spend Threshold", 50, 1000, 200)
                     df_waste = df_agg[(df_agg['Orders'] == 0) & (df_agg['Spend'] >= waste_threshold)].sort_values(by='Spend', ascending=False)
                     for c in ['Spend', 'CPC', 'ACOS']: df_waste[c] = df_waste[c].round(1)
                     st.dataframe(df_waste[['Search Term', 'Campaign', 'Ad Group', 'Spend', 'Orders', 'ACOS', 'Clicks', 'CPC']].style.format({'Spend': '{:.1f}', 'CPC': '{:.1f}', 'ACOS': '{:.1f}'}), use_container_width=True)
 
-                # TAB 6: N-GRAMS
-                with tabs[5]:
+                # TAB 5: N-GRAMS
+                with tabs[4]:
                     st.subheader("🔠 N-Gram Analyzer")
                     col_control1, col_control2 = st.columns([1, 3])
                     with col_control1: n_select = st.radio("Select Phrase Size (N)", [1, 2, 3, 4], horizontal=True, index=0)
@@ -412,7 +390,6 @@ def main():
                     'Harvesting': df_harvest if 'df_harvest' in locals() and not df_harvest.empty else pd.DataFrame(columns=['Status']),
                     'CPC_Analysis': df_cpc if 'df_cpc' in locals() and not df_cpc.empty else pd.DataFrame(columns=['Status']),
                     'Wasted_Spend': df_waste if 'df_waste' in locals() and not df_waste.empty else pd.DataFrame(columns=['Status']),
-                    'Day_Performance': day_display if 'day_display' in locals() and not day_display.empty else pd.DataFrame(columns=['Status']),
                     'N-Gram_Analysis': df_ngram if 'df_ngram' in locals() and not df_ngram.empty else pd.DataFrame(columns=['Status'])
                 }
                 
